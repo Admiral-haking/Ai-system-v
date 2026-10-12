@@ -48,6 +48,7 @@ import { SuperAdminControlPage } from './pages/SuperAdminControlPage';
 import { StoreDiscoveryCenterPage } from './pages/StoreDiscoveryCenterPage';
 import { StoreAiArchitectPage } from './pages/StoreAiArchitectPage';
 import { UnifiedEcosystemStudioPage } from './pages/UnifiedEcosystemStudioPage';
+import { IntegrationStatus } from './components/integration/IntegrationStatus';
 
 export default function App() {
   const [activeTab, setActiveTab] = useState<NavTabId>('overview');
@@ -178,6 +179,7 @@ export default function App() {
 
         <main className="flex-1 overflow-y-auto p-4 sm:p-6 lg:p-8">
           <div className="max-w-7xl mx-auto">
+            <IntegrationStatus />
             {activeTab === 'overview' && <OverviewDashboard onNavigate={setActiveTab} />}
             {activeTab === 'decision-center' && <DecisionCenterPage />}
             {activeTab === 'store-discovery' && <StoreDiscoveryCenterPage />}

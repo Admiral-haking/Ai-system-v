@@ -17,6 +17,19 @@ export default defineConfig(() => {
       hmr: process.env.DISABLE_HMR !== 'true',
       // Disable file watching when DISABLE_HMR is true to save CPU during agent edits.
       watch: process.env.DISABLE_HMR === 'true' ? null : {},
+      proxy: {
+        '/api/ai': {
+          target: process.env.COMMERCE_API_BASE_URL || 'http://127.0.0.1:3000',
+          changeOrigin: true,
+          rewrite: (url) => url.replace(/^\/api\/ai/, '/api/integrations/ai/v1'),
+          configure: (proxy) => {
+            proxy.on('proxyReq', (proxyReq) => {
+              const key = process.env.AI_INTEGRATION_API_KEY;
+              if (key) proxyReq.setHeader('x-integration-api-key', key);
+            });
+          },
+        },
+      },
     },
   };
 });
