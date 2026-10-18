@@ -16,20 +16,60 @@ export const ReportCenterPage: React.FC = () => {
   const [selectedReportType, setSelectedReportType] = useState<string>('scientific_thesis');
   const [isExporting, setIsExporting] = useState(false);
   const [exportNotice, setExportNotice] = useState<string | null>(null);
+  const [overview, setOverview] = React.useState<any>(null);
+
+  React.useEffect(() => {
+    const controller = new AbortController();
+    fetch('/api/ai-dashboard/overview', { signal: controller.signal, headers: { Accept: 'application/json' } })
+      .then((response) => (response.ok ? response.json() : Promise.reject(new Error('overview_unavailable'))))
+      .then(setOverview)
+      .catch((error: unknown) => {
+        if (!(error instanceof DOMException && error.name === 'AbortError')) setOverview(null);
+      });
+    return () => controller.abort();
+  }, []);
 
   const handlePrint = () => {
     window.print();
   };
 
   const handleSimulateDownload = (format: 'pdf' | 'excel' | 'csv') => {
+    if (format === 'pdf') {
+      handlePrint();
+      return;
+    }
+    if (!overview) {
+      setExportNotice('دادهٔ عملیاتی برای خروجی‌گیری در دسترس نیست.');
+      return;
+    }
     setIsExporting(true);
     setExportNotice(null);
-
-    setTimeout(() => {
-      setIsExporting(false);
-      setExportNotice(`فایل گزارش در قالب ${format.toUpperCase()} با موفقیت آماده و بارگیری شد.`);
-      setTimeout(() => setExportNotice(null), 4000);
-    }, 1200);
+    const rows: Array<[string, string | number]> = [
+      ['metric', 'value'],
+      ['orders_total', overview.orders?.total ?? 0],
+      ['orders_paid', overview.orders?.paid ?? 0],
+      ['customers_distinct_with_orders', overview.customers?.distinctWithOrders ?? 0],
+      ['inventory_variants', overview.inventory?.variants ?? 0],
+      ['inventory_quantity', overview.inventory?.quantity ?? 0],
+      ['inventory_reserved', overview.inventory?.reserved ?? 0],
+      ['inventory_sellable', overview.inventory?.sellable ?? 0],
+      ['sales_total', overview.sales?.total ?? 0],
+      ...((overview.categories ?? []).map((category: { name: string; revenue: number }): [string, number] => [
+        `category_${category.name}`,
+        category.revenue,
+      ])),
+    ];
+    const csv = rows.map((row) => row.map((value) => JSON.stringify(value)).join(',')).join('\n');
+    const blob = new Blob([`\uFEFF${csv}`], { type: 'text/csv;charset=utf-8' });
+    const href = URL.createObjectURL(blob);
+    const anchor = document.createElement('a');
+    anchor.href = href;
+    anchor.download = `commerce-report-${new Date().toISOString().slice(0, 10)}.${format === 'excel' ? 'csv' : 'csv'}`;
+    anchor.click();
+    URL.revokeObjectURL(href);
+    setIsExporting(false);
+    setExportNotice('خروجی واقعی داده‌های عملیاتی با موفقیت دانلود شد.');
+    setTimeout(() => setExportNotice(null), 4000);
   };
 
   return (
@@ -60,7 +100,7 @@ export const ReportCenterPage: React.FC = () => {
             className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-bold transition-colors shadow"
           >
             <FileSpreadsheet className="h-3.5 w-3.5" />
-            <span>خروجی اکسل چندبرگه</span>
+            <span>خروجی CSV داده‌های عملیاتی</span>
           </button>
         </div>
       </div>

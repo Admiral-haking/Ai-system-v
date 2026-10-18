@@ -11,34 +11,31 @@ import {
   DollarSign,
   TrendingUp,
 } from 'lucide-react';
-import { SAMPLE_CUSTOMERS } from '../data/mockData';
-import { CustomerRfm } from '../types';
 
 export const CustomerAnalyticsPage: React.FC = () => {
   const [searchTerm, setSearchTerm] = useState('');
   const [segmentFilter, setSegmentFilter] = useState<string>('all');
-  const [sortBy, setSortBy] = useState<keyof CustomerRfm>('monetaryValue');
+  const [sortBy, setSortBy] = useState<string>('monetaryValue');
   const [sortAsc, setSortAsc] = useState(false);
+  const [customerCount, setCustomerCount] = React.useState<number | null>(null);
+
+  React.useEffect(() => {
+    const controller = new AbortController();
+    fetch('/api/ai-dashboard/overview', { signal: controller.signal, headers: { Accept: 'application/json' } })
+      .then((response) => (response.ok ? response.json() : Promise.reject(new Error('overview_unavailable'))))
+      .then((payload) => setCustomerCount(payload.customers?.distinctWithOrders ?? null))
+      .catch((error: unknown) => {
+        if (!(error instanceof DOMException && error.name === 'AbortError')) setCustomerCount(null);
+      });
+    return () => controller.abort();
+  }, []);
 
   // Filter & sort
-  const filteredCustomers = React.useMemo(() => {
-    return SAMPLE_CUSTOMERS.filter((c) => {
-      const matchSearch =
-        c.customerName.toLowerCase().includes(searchTerm.toLowerCase()) ||
-        c.customerId.toLowerCase().includes(searchTerm.toLowerCase());
-      const matchSegment = segmentFilter === 'all' || c.segment.includes(segmentFilter);
-      return matchSearch && matchSegment;
-    }).sort((a, b) => {
-      const valA = a[sortBy];
-      const valB = b[sortBy];
-      if (typeof valA === 'number' && typeof valB === 'number') {
-        return sortAsc ? valA - valB : valB - valA;
-      }
-      return 0;
-    });
+  const filteredCustomers: any[] = React.useMemo(() => {
+    return [];
   }, [searchTerm, segmentFilter, sortBy, sortAsc]);
 
-  const handleSort = (field: keyof CustomerRfm) => {
+  const handleSort = (field: string) => {
     if (sortBy === field) {
       setSortAsc(!sortAsc);
     } else {
@@ -94,7 +91,7 @@ export const CustomerAnalyticsPage: React.FC = () => {
             <span className="text-xs font-bold text-slate-400">تازگی سفارش (Recency)</span>
             <Clock className="h-4 w-4 text-cyan-400" />
           </div>
-          <div className="mt-2 text-2xl font-black text-slate-100 font-mono">۲۲.۴ روز</div>
+          <div className="mt-2 text-2xl font-black text-slate-100 font-mono">—</div>
           <p className="text-[11px] text-slate-400 mt-1">
             میانگین فاصله زمانی تا آخرین خرید موفق مشتریان فعال
           </p>
@@ -105,7 +102,7 @@ export const CustomerAnalyticsPage: React.FC = () => {
             <span className="text-xs font-bold text-slate-400">بسامد خرید (Frequency)</span>
             <ArrowUpDown className="h-4 w-4 text-emerald-400" />
           </div>
-          <div className="mt-2 text-2xl font-black text-slate-100 font-mono">۱۱.۲ سفارش</div>
+          <div className="mt-2 text-2xl font-black text-slate-100 font-mono">{customerCount === null ? '—' : `${customerCount.toLocaleString('fa-IR')} مشتری`}</div>
           <p className="text-[11px] text-slate-400 mt-1">
             میانگین تعداد فاکتورهای ثبت شده در هر دوره مالی
           </p>
@@ -116,7 +113,7 @@ export const CustomerAnalyticsPage: React.FC = () => {
             <span className="text-xs font-bold text-slate-400">ارزش پولی (Monetary / LTV)</span>
             <DollarSign className="h-4 w-4 text-purple-400" />
           </div>
-          <div className="mt-2 text-2xl font-black text-slate-100 font-mono">۴۳.۸ م تومان</div>
+          <div className="mt-2 text-2xl font-black text-slate-100 font-mono">—</div>
           <p className="text-[11px] text-slate-400 mt-1">
             میانگین ارزش طول عمر مشتری با تبدیل لگاریتمی جهت مهار چولگی
           </p>
@@ -127,7 +124,7 @@ export const CustomerAnalyticsPage: React.FC = () => {
       <div className="rounded-xl border border-slate-800 bg-slate-900/80 overflow-hidden shadow-sm">
         <div className="p-4 border-b border-slate-800 flex items-center justify-between">
           <div className="text-xs font-bold text-slate-200">
-            لیست پروفایل‌های مشتریان استخراج شده از دیتاست ({filteredCustomers.length} مشتری)
+            {customerCount === null ? 'آمار مشتریان در دسترس نیست' : `${customerCount.toLocaleString('fa-IR')} مشتری دارای سفارش`}
           </div>
           <div className="text-[11px] text-slate-400">
             کلیک روی سرستون‌ها برای مرتب‌سازی
@@ -169,7 +166,9 @@ export const CustomerAnalyticsPage: React.FC = () => {
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-800/60 text-slate-300">
-              {filteredCustomers.map((c) => (
+              {filteredCustomers.length === 0 ? (
+                <tr><td colSpan={8} className="py-10 px-4 text-center text-slate-400">پروفایل شخصی مشتریان برای این سامانه صادر نمی‌شود؛ فقط آمار تجمیعی امن نمایش داده می‌شود.</td></tr>
+              ) : filteredCustomers.map((c) => (
                 <tr key={c.customerId} className="hover:bg-slate-800/30 transition-colors">
                   <td className="py-3 px-4">
                     <div className="font-bold text-slate-200">{c.customerName}</div>

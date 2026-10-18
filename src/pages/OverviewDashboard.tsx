@@ -24,7 +24,7 @@ import {
   Pie,
   Cell,
 } from 'recharts';
-import { generateDailySales, CLUSTERS_DATA, FORECAST_MODELS, MLFLOW_RUNS } from '../data/mockData';
+import { CLUSTERS_DATA, FORECAST_MODELS, MLFLOW_RUNS } from '../data/mockData';
 import { NavTabId } from '../components/layout/Sidebar';
 
 interface OverviewDashboardProps {
@@ -32,52 +32,71 @@ interface OverviewDashboardProps {
 }
 
 export const OverviewDashboard: React.FC<OverviewDashboardProps> = ({ onNavigate }) => {
-  const salesData = React.useMemo(() => generateDailySales('xgboost', 14), []);
+  const [overview, setOverview] = React.useState<{
+    sales: { total: number; byDay: Record<string, number> };
+    orders: { total: number; paid: number };
+    inventory: { variants: number; quantity: number; reserved: number; sellable: number };
+  } | null>(null);
+  const [overviewError, setOverviewError] = React.useState(false);
+
+  React.useEffect(() => {
+    const controller = new AbortController();
+    fetch('/api/ai-dashboard/overview', { signal: controller.signal, headers: { Accept: 'application/json' } })
+      .then((response) => {
+        if (!response.ok) throw new Error('overview_unavailable');
+        return response.json();
+      })
+      .then((payload) => setOverview(payload))
+      .catch((error: unknown) => {
+        if (error instanceof DOMException && error.name === 'AbortError') return;
+        setOverviewError(true);
+      });
+    return () => controller.abort();
+  }, []);
+
+  const formatMoney = (value: number) => `${(value / 10).toLocaleString('fa-IR')} تومان`;
+  const formatNumber = (value: number) => value.toLocaleString('fa-IR');
   const chartData = React.useMemo(() => {
-    return salesData.slice(-35).map((item) => ({
-      date: item.date.slice(5),
-      'فروش واقعی': item.actualSales > 0 ? Math.round(item.actualSales / 1000000) : null,
-      'پیش‌بینی مدل': Math.round(item.predictedSales / 1000000),
-      'حد بالای اطمینان ۹۵٪': Math.round(item.upperBound / 1000000),
-      'حد پایین اطمینان': Math.round(item.lowerBound / 1000000),
-      isForecast: item.isForecast,
-    }));
-  }, [salesData]);
+    return Object.entries(overview?.sales.byDay ?? {})
+      .sort(([left], [right]) => left.localeCompare(right))
+      .slice(-35)
+      .map(([date, total]) => ({ date: date.slice(5), 'فروش واقعی': Math.round(total / 1000000) }));
+  }, [overview]);
 
   const kpis = [
     {
       title: 'فروش ۳۰ روز اخیر',
-      value: '۵۵۴.۲ میلیون تومان',
-      change: '+۱۲.۴٪ نسبت به ماه قبل',
-      isPositive: true,
-      subtext: 'بر اساس ۳,۱۸۰ سفارش ثبت شده',
+      value: overview ? formatMoney(overview.sales.total) : '—',
+      change: overview ? `${formatNumber(overview.orders.paid)} سفارش پرداخت‌شده` : 'در حال دریافت داده',
+      isPositive: Boolean(overview),
+      subtext: overviewError ? 'داده در دسترس نیست' : 'منبع: API عملیاتی فروشگاه',
       icon: TrendingUp,
       color: 'from-blue-500/20 to-cyan-500/20 border-cyan-500/30 text-cyan-400',
     },
     {
       title: 'دقت مدل پیش‌بینی (WAPE)',
-      value: '۴.۸۲٪',
-      change: '-۲.۱٪ کاهش خطای مدل',
-      isPositive: true,
-      subtext: 'مدل XGBoost v3.2 با بهینه‌سازی Optuna',
+      value: '—',
+      change: 'مدل پیش‌بینی هنوز متصل نیست',
+      isPositive: false,
+      subtext: 'دادهٔ مدل در API عملیاتی موجود نیست',
       icon: Target,
       color: 'from-emerald-500/20 to-teal-500/20 border-emerald-500/30 text-emerald-400',
     },
     {
       title: 'کل مشتریان تحلیل‌شده',
-      value: '۴,۳۷۲ مشتری',
-      change: '۴ بخش رفتاری (RFM)',
-      isPositive: true,
-      subtext: 'شاخص Silhouette معادل ۰.۶۴۲',
+      value: overview ? formatNumber(overview.inventory.variants) : '—',
+      change: 'واریانت دارای موجودی',
+      isPositive: Boolean(overview),
+      subtext: overview ? `قابل فروش: ${formatNumber(overview.inventory.sellable)}` : 'در حال دریافت داده',
       icon: Users,
       color: 'from-purple-500/20 to-pink-500/20 border-purple-500/30 text-purple-400',
     },
     {
       title: 'شاخص ROC-AUC خرید مجدد',
-      value: '۰.۸۹۲',
-      change: 'کالیبراسیون Isotonic',
-      isPositive: true,
-      subtext: 'Brier Score معادل ۰.۱۱۸',
+      value: overview ? formatNumber(overview.inventory.quantity) : '—',
+      change: overview ? `رزروشده: ${formatNumber(overview.inventory.reserved)}` : 'در حال دریافت داده',
+      isPositive: Boolean(overview),
+      subtext: 'مجموع موجودی از API عملیاتی',
       icon: Zap,
       color: 'from-amber-500/20 to-orange-500/20 border-amber-500/30 text-amber-400',
     },

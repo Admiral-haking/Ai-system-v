@@ -9,7 +9,7 @@ export const IntegrationStatus: React.FC = () => {
 
   const check = React.useCallback(async (signal?: AbortSignal) => {
     try {
-      const response = await fetch('/api/ai/health', { signal, headers: { Accept: 'application/json' } });
+      const response = await fetch('/api/ai-dashboard/health', { signal, headers: { Accept: 'application/json' } });
       if (!response.ok) throw new Error(`HTTP ${response.status}`);
       const payload = await response.json();
       if (!payload?.ok) throw new Error('پاسخ سلامت معتبر نیست');

@@ -20,35 +20,73 @@ import {
   CartesianGrid,
   Tooltip,
 } from 'recharts';
-import { generateDailySales, FORECAST_MODELS } from '../data/mockData';
 import { ForecastHorizon, ForecastModelType } from '../types';
 
 export const SalesForecastingPage: React.FC = () => {
-  const [selectedModel, setSelectedModel] = useState<ForecastModelType>('xgboost');
+  const [selectedModel, setSelectedModel] = useState<ForecastModelType>('seasonal_naive');
   const [horizon, setHorizon] = useState<ForecastHorizon>(30);
   const [showConfidence, setShowConfidence] = useState(true);
+  const [history, setHistory] = React.useState<Record<string, number>>({});
+  const [forecast, setForecast] = React.useState<Array<{ date: string; predictedSales: number }>>([]);
 
   // Model details from master registry
-  const currentModelInfo = React.useMemo(() => {
-    return (
-      FORECAST_MODELS.find((m) => m.id.includes(selectedModel.split('_')[0])) ||
-      FORECAST_MODELS[0]
-    );
-  }, [selectedModel]);
+  const currentModelInfo = {
+    name: 'Seasonal Naive v1 (دادهٔ واقعی)',
+    version: 'baseline',
+    wape: null,
+    r2: null,
+    rmse: 0,
+    inferenceLatencyMs: null,
+    featuresUsed: ['historical daily sales'],
+  };
 
-  // Generate sales forecast series dynamically based on model and horizon
+  React.useEffect(() => {
+    const controller = new AbortController();
+    Promise.all([
+      fetch('/api/ai-dashboard/overview', { signal: controller.signal, headers: { Accept: 'application/json' } }),
+      fetch(`/api/ai-dashboard/forecast?horizon=${horizon}`, { signal: controller.signal, headers: { Accept: 'application/json' } }),
+    ])
+      .then(async ([historyResponse, forecastResponse]) => {
+        if (!historyResponse.ok || !forecastResponse.ok) throw new Error('forecast_unavailable');
+        return [await historyResponse.json(), await forecastResponse.json()] as const;
+      })
+      .then(([historyPayload, forecastPayload]) => {
+        setHistory(historyPayload.sales?.byDay ?? {});
+        setForecast(forecastPayload.forecast ?? []);
+      })
+      .catch((error: unknown) => {
+        if (!(error instanceof DOMException && error.name === 'AbortError')) {
+          setHistory({});
+          setForecast([]);
+        }
+      });
+    return () => controller.abort();
+  }, [horizon]);
+
   const salesData = React.useMemo(() => {
-    const raw = generateDailySales(selectedModel, horizon);
-    return raw.map((item) => ({
+    const historical = Object.entries(history)
+      .sort(([left], [right]) => left.localeCompare(right))
+      .slice(-45)
+      .map(([date, total]) => ({
+        date: date.slice(5),
+        fullDate: date,
+        'فروش واقعی': Number((total / 1000000).toFixed(2)),
+        'پیش‌بینی مدل': null,
+        'حد بالای اطمینان ۹۵٪': null,
+        'حد پایین اطمینان ۹۵٪': null,
+        isForecast: false,
+      }));
+    const predicted = forecast.map((item) => ({
       date: item.date.slice(5),
       fullDate: item.date,
-      'فروش واقعی': item.actualSales > 0 ? Number((item.actualSales / 1000000).toFixed(2)) : null,
+      'فروش واقعی': null,
       'پیش‌بینی مدل': Number((item.predictedSales / 1000000).toFixed(2)),
-      'حد بالای اطمینان ۹۵٪': Number((item.upperBound / 1000000).toFixed(2)),
-      'حد پایین اطمینان ۹۵٪': Number((item.lowerBound / 1000000).toFixed(2)),
-      isForecast: item.isForecast,
+      'حد بالای اطمینان ۹۵٪': null,
+      'حد پایین اطمینان ۹۵٪': null,
+      isForecast: true,
     }));
-  }, [selectedModel, horizon]);
+    return [...historical, ...predicted];
+  }, [history, forecast]);
 
   return (
     <div className="space-y-6">
@@ -91,30 +129,30 @@ export const SalesForecastingPage: React.FC = () => {
           {
             id: 'xgboost' as ForecastModelType,
             title: 'XGBoost Regressor',
-            sub: 'بهینه‌سازی شده با Optuna (مدل تولید)',
-            wape: '۴.۸۲٪',
-            isBest: true,
+            sub: 'سرویس مدل در محیط تولید متصل نیست',
+            wape: '—',
+            isBest: false,
           },
           {
             id: 'random_forest' as ForecastModelType,
             title: 'Random Forest',
-            sub: 'جنگل تصادفی (۲۰۰ درخت تصمیم)',
-            wape: '۶.۷۵٪',
+            sub: 'سرویس مدل در محیط تولید متصل نیست',
+            wape: '—',
             isBest: false,
           },
           {
             id: 'linear_regression' as ForecastModelType,
             title: 'Ridge Linear Reg',
-            sub: 'رگرسیون خطی قانونمند L2',
-            wape: '۱۳.۸٪',
+            sub: 'سرویس مدل در محیط تولید متصل نیست',
+            wape: '—',
             isBest: false,
           },
           {
             id: 'seasonal_naive' as ForecastModelType,
             title: 'Seasonal Naive',
-            sub: 'پایه مقایسه (انتقال دوره ۷ روز قبل)',
-            wape: '۱۸.۹٪',
-            isBest: false,
+            sub: 'پیش‌بینی فعال بر پایهٔ فروش واقعی اخیر',
+            wape: 'baseline',
+            isBest: true,
           },
         ].map((algo) => (
           <button

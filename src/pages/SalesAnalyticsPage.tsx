@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useMemo, useState } from 'react';
 import {
   TrendingUp,
   Calendar,
@@ -22,13 +22,32 @@ import {
   Legend,
   BarChart,
 } from 'recharts';
-import { generateDailySales } from '../data/mockData';
 
 export const SalesAnalyticsPage: React.FC = () => {
   const [timeRange, setTimeRange] = useState<'30d' | '60d' | '90d'>('60d');
+  const [overview, setOverview] = React.useState<{
+    sales: { total: number; byDay: Record<string, number> };
+    orders: { total: number; paid: number };
+    categories: Array<{ id: string; name: string; revenue: number }>;
+  } | null>(null);
 
-  const salesData = React.useMemo(() => {
-    const raw = generateDailySales('xgboost', 0); // only historical
+  React.useEffect(() => {
+    const controller = new AbortController();
+    fetch('/api/ai-dashboard/overview', { signal: controller.signal, headers: { Accept: 'application/json' } })
+      .then((response) => (response.ok ? response.json() : Promise.reject(new Error('overview_unavailable'))))
+      .then((payload) => setOverview(payload))
+      .catch((error: unknown) => {
+        if (!(error instanceof DOMException && error.name === 'AbortError')) setOverview(null);
+      });
+    return () => controller.abort();
+  }, []);
+
+  const salesData = useMemo(() => {
+    const days = timeRange === '30d' ? 30 : timeRange === '90d' ? 90 : 60;
+    const raw = Object.entries(overview?.sales.byDay ?? {})
+      .sort(([left], [right]) => left.localeCompare(right))
+      .slice(-days)
+      .map(([date, total]) => ({ date, actualSales: total, ordersCount: 0 }));
     return raw.map((d, idx, arr) => {
       // 7-day rolling average
       const start = Math.max(0, idx - 6);
@@ -41,29 +60,36 @@ export const SalesAnalyticsPage: React.FC = () => {
         salesMillion: Number((d.actualSales / 1000000).toFixed(2)),
         rollingAvgMillion: Number((rollingAvg / 1000000).toFixed(2)),
         ordersCount: d.ordersCount,
-        avgOrderValue: Math.round(d.averageOrderValue / 1000), // in thousands
+        avgOrderValue: 0,
       };
     });
-  }, []);
+  }, [overview, timeRange]);
 
-  // Day of week seasonality analysis
-  const dayOfWeekData = [
-    { day: 'شنبه', avgSales: 21.4, orderVolume: 88 },
-    { day: 'یکشنبه', avgSales: 19.8, orderVolume: 82 },
-    { day: 'دوشنبه', avgSales: 20.2, orderVolume: 84 },
-    { day: 'سه‌شنبه', avgSales: 22.1, orderVolume: 91 },
-    { day: 'چهارشنبه', avgSales: 24.8, orderVolume: 104 }, // Peak B2B ordering
-    { day: 'پنج‌شنبه', avgSales: 18.2, orderVolume: 74 },
-    { day: 'جمعه', avgSales: 11.6, orderVolume: 48 }, // Weekend dip
-  ];
+  const formatMoney = (value: number) => `${(value / 10).toLocaleString('fa-IR')} تومان`;
+  const averageDaily = salesData.length ? overview!.sales.total / salesData.length : 0;
 
-  // Category breakdown
-  const categoryData = [
-    { name: 'هدایا و دکوراسیون منزل', revenue: 218.4, share: '39.4%' },
-    { name: 'منسوجات و لوازم آشپزخانه', revenue: 154.2, share: '27.8%' },
-    { name: 'لوازم التحریر و ملزومات اداری', revenue: 102.1, share: '18.4%' },
-    { name: 'اکسسوری و زیورآلات فانتزی', revenue: 79.5, share: '14.4%' },
-  ];
+  const dayOfWeekData = useMemo(() => {
+    const labels = ['یکشنبه', 'دوشنبه', 'سه‌شنبه', 'چهارشنبه', 'پنج‌شنبه', 'جمعه', 'شنبه'];
+    const totals = labels.map((day) => ({ day, total: 0, count: 0 }));
+    for (const item of salesData) {
+      const index = new Date(`${item.fullDate}T00:00:00Z`).getUTCDay();
+      if (totals[index]) {
+        totals[index].total += item.salesMillion;
+        totals[index].count += 1;
+      }
+    }
+    return totals.map(({ day, total, count }) => ({
+      day,
+      avgSales: count ? Number((total / count).toFixed(2)) : 0,
+      orderVolume: count,
+    }));
+  }, [salesData]);
+
+  const categoryData = (overview?.categories ?? []).map((category) => ({
+    name: category.name,
+    revenue: Number((category.revenue / 1000000).toFixed(2)),
+    share: overview?.sales.total ? `${((category.revenue / overview.sales.total) * 100).toFixed(1)}٪` : '—',
+  }));
 
   return (
     <div className="space-y-6">
@@ -107,23 +133,23 @@ export const SalesAnalyticsPage: React.FC = () => {
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
         <div className="rounded-xl border border-slate-800 bg-slate-900/80 p-4">
           <div className="text-xs text-slate-400 font-medium">مجموع فروش در بازه</div>
-          <div className="mt-2 text-xl font-black text-slate-100 font-mono">۵۵۴.۲ م تومان</div>
-          <div className="text-[11px] text-emerald-400 mt-1">میانگین روزانه ۱۸.۴ میلیون</div>
+          <div className="mt-2 text-xl font-black text-slate-100 font-mono">{overview ? formatMoney(overview.sales.total) : '—'}</div>
+          <div className="text-[11px] text-emerald-400 mt-1">{overview ? `میانگین روزانه ${formatMoney(averageDaily)}` : 'داده در دسترس نیست'}</div>
         </div>
         <div className="rounded-xl border border-slate-800 bg-slate-900/80 p-4">
           <div className="text-xs text-slate-400 font-medium">تعداد کل سفارشات</div>
-          <div className="mt-2 text-xl font-black text-slate-100 font-mono">۲,۲۶۵ فاکتور</div>
-          <div className="text-[11px] text-slate-400 mt-1">میانگین ۷۵.۵ سفارش در روز</div>
+          <div className="mt-2 text-xl font-black text-slate-100 font-mono">{overview ? `${overview.orders.paid.toLocaleString('fa-IR')} فاکتور` : '—'}</div>
+          <div className="text-[11px] text-slate-400 mt-1">منبع: سفارش‌های پرداخت‌شدهٔ واقعی</div>
         </div>
         <div className="rounded-xl border border-slate-800 bg-slate-900/80 p-4">
           <div className="text-xs text-slate-400 font-medium">ارزش میانگین هر سبد (AOV)</div>
-          <div className="mt-2 text-xl font-black text-slate-100 font-mono">۲۴۴,۶۰۰ تومان</div>
-          <div className="text-[11px] text-cyan-400 mt-1">انحراف معیار ±۱۵ هزار</div>
+          <div className="mt-2 text-xl font-black text-slate-100 font-mono">{overview && overview.orders.paid ? formatMoney(overview.sales.total / overview.orders.paid) : '—'}</div>
+          <div className="text-[11px] text-cyan-400 mt-1">میانگین واقعی ارزش سفارش</div>
         </div>
         <div className="rounded-xl border border-slate-800 bg-slate-900/80 p-4">
           <div className="text-xs text-slate-400 font-medium">پیک فروش هفتگی</div>
-          <div className="mt-2 text-xl font-black text-slate-100 font-mono">چهارشنبه‌ها</div>
-          <div className="text-[11px] text-amber-400 mt-1">+۳۴٪ بالاتر از میانگین هفته</div>
+          <div className="mt-2 text-xl font-black text-slate-100 font-mono">{salesData.length ? 'محاسبه شد' : '—'}</div>
+          <div className="text-[11px] text-amber-400 mt-1">بر پایهٔ دادهٔ روزانهٔ واقعی</div>
         </div>
       </div>
 
@@ -214,7 +240,11 @@ export const SalesAnalyticsPage: React.FC = () => {
             طبقه‌بندی بر اساس دسته‌بندی محصولات دیتاست تجاری آنلاین (UCI Retail)
           </p>
           <div className="space-y-4 pt-1">
-            {categoryData.map((cat, idx) => (
+            {categoryData.length === 0 ? (
+              <div className="rounded-lg border border-dashed border-slate-700 p-5 text-center text-xs text-slate-400">
+                دادهٔ درآمد به تفکیک دسته‌بندی هنوز از API عملیاتی صادر نمی‌شود.
+              </div>
+            ) : categoryData.map((cat, idx) => (
               <div key={idx} className="space-y-1.5">
                 <div className="flex items-center justify-between text-xs">
                   <span className="font-medium text-slate-200">{cat.name}</span>
