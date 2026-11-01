@@ -26,6 +26,7 @@ import {
 } from 'recharts';
 import { CLUSTERS_DATA, FORECAST_MODELS, MLFLOW_RUNS } from '../data/mockData';
 import { NavTabId } from '../components/layout/Sidebar';
+import { DashboardPanel, MetricCard, QuickActionGroup, SectionHeader, dashboardTokens } from '../components/dashboard';
 
 interface OverviewDashboardProps {
   onNavigate: (tab: NavTabId) => void;
@@ -105,8 +106,8 @@ export const OverviewDashboard: React.FC<OverviewDashboardProps> = ({ onNavigate
   return (
     <div className="space-y-6">
       {/* Top Banner with Quick Actions */}
-      <div className="relative overflow-hidden rounded-2xl border border-slate-800 bg-gradient-to-r from-slate-900 via-slate-900/90 to-cyan-950/40 p-6 shadow-xl">
-        <div className="relative z-10 flex flex-col md:flex-row md:items-center justify-between gap-4">
+      <section className="rounded-xl border border-slate-800 bg-slate-900 p-6">
+        <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
           <div className="space-y-1.5 max-w-2xl">
             <div className="flex items-center gap-2 text-xs font-mono text-cyan-400">
               <span className="h-2 w-2 rounded-full bg-cyan-400 animate-ping"></span>
@@ -120,67 +121,54 @@ export const OverviewDashboard: React.FC<OverviewDashboardProps> = ({ onNavigate
               با قابلیت تبیین‌پذیری به روش ارزش شپلی (SHAP) و ردیابی آزمایش‌ها با MLflow بر روی لینوکس.
             </p>
           </div>
-          <div className="flex flex-wrap items-center gap-2.5">
+          <QuickActionGroup>
             <button
               onClick={() => onNavigate('decision-center')}
-              className="flex items-center gap-2 rounded-lg bg-amber-500 px-4 py-2.5 text-xs font-bold text-slate-950 hover:bg-amber-400 transition-colors shadow-lg shadow-amber-500/20"
+              className={`flex min-h-11 items-center gap-2 rounded-lg bg-amber-500 px-4 py-2.5 text-xs font-bold text-slate-950 transition-colors hover:bg-amber-400 ${dashboardTokens.focus}`}
             >
               <Target className="h-4 w-4" />
               <span>اتاق تصمیم‌گیری خودکار</span>
             </button>
             <button
               onClick={() => onNavigate('sales-forecast')}
-              className="flex items-center gap-2 rounded-lg bg-cyan-500 px-4 py-2.5 text-xs font-bold text-slate-950 hover:bg-cyan-400 transition-colors shadow-lg shadow-cyan-500/20"
+              className={`flex min-h-11 items-center gap-2 rounded-lg bg-cyan-500 px-4 py-2.5 text-xs font-bold text-slate-950 transition-colors hover:bg-cyan-400 ${dashboardTokens.focus}`}
             >
               <TrendingUp className="h-4 w-4" />
               <span>پیش‌بینی ۳۰ روزه</span>
             </button>
             <button
               onClick={() => onNavigate('ai-copilot')}
-              className="flex items-center gap-2 rounded-lg bg-slate-800 px-4 py-2.5 text-xs font-bold text-slate-200 hover:bg-slate-700 border border-slate-700 transition-colors"
+              className={`flex min-h-11 items-center gap-2 rounded-lg border border-slate-700 bg-slate-800 px-4 py-2.5 text-xs font-bold text-slate-200 transition-colors hover:bg-slate-700 ${dashboardTokens.focus}`}
             >
               <Sparkles className="h-4 w-4 text-cyan-400" />
               <span>دستیار هوشمند (Copilot)</span>
             </button>
-          </div>
+          </QuickActionGroup>
         </div>
-      </div>
+      </section>
 
       {/* 4 Metric Cards */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+      <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
         {kpis.map((kpi, idx) => {
           const Icon = kpi.icon;
           return (
-            <div
+            <MetricCard
               key={idx}
-              className={`rounded-xl border bg-gradient-to-b ${kpi.color} bg-slate-900/80 p-5 shadow-sm transition-all hover:border-slate-600`}
-            >
-              <div className="flex items-center justify-between">
-                <span className="text-xs font-medium text-slate-400">{kpi.title}</span>
-                <div className="p-2 rounded-lg bg-slate-800/80 border border-slate-700/60">
-                  <Icon className="h-4 w-4" />
-                </div>
-              </div>
-              <div className="mt-3 text-2xl font-black text-slate-100 tracking-tight font-mono">
-                {kpi.value}
-              </div>
-              <div className="mt-2 flex items-center justify-between text-xs">
-                <span className={`flex items-center gap-0.5 font-medium ${kpi.isPositive ? 'text-emerald-400' : 'text-rose-400'}`}>
-                  {kpi.isPositive ? <ArrowUpRight className="h-3.5 w-3.5" /> : <ArrowDownRight className="h-3.5 w-3.5" />}
-                  {kpi.change}
-                </span>
-                <span className="text-slate-400">{kpi.subtext}</span>
-              </div>
-            </div>
+              title={kpi.title}
+              value={kpi.value}
+              detail={kpi.change}
+              source={kpi.subtext}
+              icon={Icon}
+            />
           );
         })}
       </div>
 
       {/* Main Chart Section: Actual vs Predicted Sales with 95% Confidence Band */}
-      <div className="rounded-xl border border-slate-800 bg-slate-900/80 p-5 shadow-sm">
-        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-4 border-b border-slate-800">
+      <DashboardPanel title="روند فروش روزانه و پیش‌بینی افق آینده (میلیون تومان)" description="دادهٔ فروش واقعی از API عملیاتی؛ پیش‌بینی فقط زمانی نمایش داده می‌شود که منبع مدل متصل باشد.">
+        <div className="flex flex-col gap-3 border-b border-slate-800 pb-4 sm:flex-row sm:items-center sm:justify-between">
           <div>
-            <h3 className="text-sm font-bold text-slate-100 flex items-center gap-2">
+            <h3 className="flex items-center gap-2 text-sm font-bold text-slate-100">
               <TrendingUp className="h-4 w-4 text-cyan-400" />
               <span>روند فروش روزانه و پیش‌بینی افق آینده (میلیون تومان)</span>
             </h3>
@@ -266,7 +254,7 @@ export const OverviewDashboard: React.FC<OverviewDashboardProps> = ({ onNavigate
             </AreaChart>
           </ResponsiveContainer>
         </div>
-      </div>
+      </DashboardPanel>
 
       {/* Two Column Grid: Customer Clusters Distribution & Linux Infrastructure Status */}
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
